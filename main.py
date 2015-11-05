@@ -255,6 +255,5 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         originalTitle = originalTitle.replace(":","")
         originalTitle = originalTitle.replace("-","")
         torrentNameCleared = torrentNameCleared.replace(originalTitle, movie['title'])    
-        torrentNameCleared = torrentNameCleared.replace("[", "(" + str(movie['info']['year']) + ") [")        
-        log.debug("Nome limpo: " + torrentNameCleared + " Nome renomeado: " + movie['title'])        
+        torrentNameCleared = torrentNameCleared.replace("[", "(" + str(movie['info']['year']) + ") [")                
         return torrentNameCleared
