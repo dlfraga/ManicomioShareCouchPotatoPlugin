@@ -1,3 +1,5 @@
+Alert: This plugin isn't working anymore due to changes on the site. 
+
 # ManicomioShareCouchPotatoPlugin
 Plugin for couchpotato to search manicomio-share for files. 
 To install, clone the repo to your custom_plugins folder and after restarting couchpotato enable it in the settings.
