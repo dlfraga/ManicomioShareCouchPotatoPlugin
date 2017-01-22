@@ -7,13 +7,15 @@ To install, clone the repo to your custom_plugins folder and after restarting co
 
 ## Know problems / Problemas conhecidos ##
 
- + Alguns torrents no tracker tem datas erradas no painel de pesquisa. Isso faz com que o couchpotato pense que o torrent é o errado e então o ignore. Isso não vai ser arrumado
-+  Para filmes brasileiros selecione o nome brasileiro no couchpotato
-+  Vários métodos de validação de torrents foram implementados mas os resultados podem variar
++ Alguns torrents no tracker tem datas erradas no painel de pesquisa. Isso faz com que o couchpotato pense que o torrent é o errado e então o ignore. Isso não vai ser arrumado
++ Para filmes brasileiros selecione o nome brasileiro no couchpotato
++ Vários métodos de validação de torrents foram implementados mas os resultados podem variar
+
 ___
-+  Some torrents in the tracker have wrong dates in the search panel. This makes couchpotato 'think' the torrent is wrong and it will ignore the file. This will not be fixed
-+	For brazillian movies, choose the brazillian name in couchpotato
-+	Various methods of torrent validation were implemented, but results may vary.
+
++ Some torrents in the tracker have wrong dates in the search panel. This makes couchpotato 'think' the torrent is wrong and it will ignore the file. This will not be fixed
++ For brazillian movies, choose the brazillian name in couchpotato
++ Various methods of torrent validation were implemented, but results may vary.
 
 **Disclaimer** 
 Este código não é endossado e nem aprovado pelos mantenedores do site ou qualquer representante.
