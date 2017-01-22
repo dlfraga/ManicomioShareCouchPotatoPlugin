@@ -6,18 +6,16 @@
 #most credits goes to them
 from bs4 import BeautifulSoup
 
-from couchpotato.core.helpers.encoding import tryUrlencode, toUnicode
-from couchpotato.core.helpers.variable import tryInt, getIdentifier
+from couchpotato.core.helpers.encoding import tryUrlencode
+from couchpotato.core.helpers.variable import tryInt
 from couchpotato.core.logger import CPLog
 from requests import HTTPError
-from json import *
 from couchpotato.core.media._base.providers.torrent.base import TorrentProvider
 from couchpotato.core.media.movie.providers.base import MovieProvider
 
 import traceback
 import re
 import time
-import json
 log = CPLog(__name__)
 
 class TorrentDetails(object):
@@ -64,9 +62,9 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         else:
                 onlyfreeleech = False        
             
-        #if not '/deslogar.php' in self.urlopen(self.urls['login'], data=self.getLoginParams()).lower():
-        #    log.info('problems logging into manicomio-share.com')
-        #   return []                        
+        if not '/deslogar.php' in self.urlopen(self.urls['login'], data=self.getLoginParams()).lower():
+            log.info('problems logging into manicomio-share.com')
+            return []                        
         torrentlist = []            
         log.info('Looking on manicomio-share for movie named %s, with quality %s and category code %s' % (title, str(quality['custom']['quality']), self.getCatId(quality)))
         
@@ -200,8 +198,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
                         results.append({
                             'leechers': torrentfind.leechers,
                             'seeders': torrentfind.seeders,
-    #                         'name': self.replaceTitleAndValidateTorrent(movie, translatedMovieTitle, torrentfind.torrentname),
-                            'name': self.replaceTitleAndValidateTorrent(movie, title, torrentfind.torrentname),
+                            'name': self.replaceTitleAndValidateTorrent(movie, torrentfind.torrentname),
                             'url': torrentfind.downlink,
                             'detail_url': torrentfind.permalink,
                             'id': torrentfind.torrentid,
@@ -224,7 +221,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         }
 
     def loginSuccess(self, output):
-        #log.debug('Debug saida login: ' + output)    
+        #log.debug('Debug login: ' + output)    
         #log.debug('Checking login success for Manicomio-share: %s' % ('True' if ('deslogar.php' in output.lower()
                                                                                  #or '<title>:: Manicomio Share - A comunidade do Brasil ::</title>' in output.lower()) else 'False'))
         return '<title>MS-->Logue-se : :: Manicomio Share - A comunidade do Brasil ::</title>' in output
@@ -251,24 +248,21 @@ class ManicomioShare(TorrentProvider, MovieProvider):
 #         except:
 #             log.error('Failed to parse IMDB page: %s' % (traceback.format_exc()))
             
-    def replaceTitleAndValidateTorrent(self, movie, translatedName, torrentName):
+    def replaceTitleAndValidateTorrent(self, movie, torrentName):
         #Removes [DualAudio *] tags and subtitle tags [-] or [+]
         torrentNameCleared = re.sub('\[DualAudio.+?].+[-+]\]',"", torrentName)
         torrentNameCleared = re.sub('\[livre\]', "", torrentNameCleared)
         torrentNameCleared = re.sub('\[Repack\]', "", torrentNameCleared)
         torrentNameCleared = re.sub('Dublado', "", torrentNameCleared)
-#         torrentNames = torrentNameCleared.split("-")
-#         try:
-#             torrentNameCleared = torrentNames[1]
-#         except Exception:
-#             pass
         torrentNameCleared = re.sub(r"^(.*?)\s-\s(?!\d)","",torrentNameCleared)
-#         originalTitle = movie['title']
-#         originalTitle = originalTitle.replace(":","")
-#         originalTitle = originalTitle.replace("-","")
-#         torrentNameCleared = torrentNameCleared.replace(translatedName, movie['title'])    
+        #originalTitle = movie['title']
+        #originalTitle = originalTitle.replace(":","")
+        #originalTitle = originalTitle.replace("-","")
+        #torrentNameCleared = torrentNameCleared.replace(translatedName, movie['title'])
+            
+        #Couchpotato expects that the movie release year appears on the torrent name
         torrentNameCleared = torrentNameCleared.replace("[", "(" + str(movie['info']['year']) + ") [")
-        ##edge case: some torrent names don't have any brackets so we need to verify if we need to add the year
+        ##edge case: some torrent names don't have any brackets so we need to verify if we need to add the year if it's not already there
         hasDateAlready = re.search('\(\d\d\d\d\)', torrentNameCleared)
         if not hasDateAlready:
             torrentNameCleared = torrentNameCleared + " (" + str(movie['info']['year']) + ")"
@@ -276,7 +270,6 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         return torrentNameCleared
     
     def login(self):
-
         # Check if we are still logged in every hour
         now = time.time()
         if self.last_login_check and self.last_login_check < (now - 3600):
@@ -292,7 +285,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
             return True
 
         try:
-            #Open the login page to load cloudflare cookies
+            #Open the login page to load cloudflare cookies. 
             output = self.urlopen(self.urls['login'])
             #log.debug('Debug ------ 1: ' + output)    
             #Now try to login with provided data
