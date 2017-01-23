@@ -1,9 +1,9 @@
 # coding: utf8
-#This code is not endorsed nor approved by the site maintainers or any representatives.
-#Use at your own risk.
-#The plugin was based on the work of https://github.com/flightlevel/TehConnectionCouchPotatoPlugin/ and
-#https://github.com/djoole/couchpotato.provider.t411
-#most credits goes to them
+# This code is not endorsed nor approved by the site maintainers or any representatives.
+# Use at your own risk.
+# The plugin was based on the work of https://github.com/flightlevel/TehConnectionCouchPotatoPlugin/ and
+# https://github.com/djoole/couchpotato.provider.t411
+# most credits goes to them
 from bs4 import BeautifulSoup
 
 from couchpotato.core.helpers.encoding import tryUrlencode
@@ -16,6 +16,7 @@ from couchpotato.core.media.movie.providers.base import MovieProvider
 import traceback
 import re
 import time
+from couchpotato.core.media.movie.providers.info.themoviedb import TheMovieDb
 log = CPLog(__name__)
 
 class TorrentDetails(object):
@@ -34,11 +35,11 @@ class TorrentDetails(object):
         self.ageindays = ageindays        
 
 class ManicomioShare(TorrentProvider, MovieProvider):
-    #'search': 'http://www.manicomio-share.com/busca-filmes.php?vince=0&onde=1&search=%s&parent_categ=0&qualite=&cor=&codecvideo=&extensao=&tipoaudio=&lang=0&paisorigem=&direc=',
+    # 'search': 'http://www.manicomio-share.com/busca-filmes.php?vince=0&onde=1&search=%s&parent_categ=0&qualite=&cor=&codecvideo=&extensao=&tipoaudio=&lang=0&paisorigem=&direc=',
     urls = {
         'baseurl': 'https://www.manicomio-share.com/',
         'login': 'https://www.manicomio-share.com/',
-        'login_check': 'https://www.manicomio-share.com/deslogar.php',        
+        'login_check': 'https://www.manicomio-share.com/deslogar.php',
         'search': 'https://www.manicomio-share.com/pesquisa.php?busca=%s&cat=%s&opt2=0&vnc=0&ano=0&opt=0',
         'torrentdetails': 'https://www.manicomio-share.com/ajax/ajax2.php?torrent=%s',
         'imdbreleaseinfo': 'http://www.imdb.com/title/%s/releaseinfo'
@@ -48,12 +49,12 @@ class ManicomioShare(TorrentProvider, MovieProvider):
     http_time_between_calls = 5  # seconds
     
     cat_ids = [
-                    ([127], ['720p', '1080p','brrip']),
-                    ([147,141],['3d']),
-                    ([189],['4K','2160p']),
-                    ([132,183,143],['bdrip']),
-                    ([142], ['bd25','bd50']),                    
-                    ([34,144], ['dvdrip','dvdr']),
+                    ([127], ['720p', '1080p', 'brrip']),
+                    ([147, 141], ['3d']),
+                    ([189], ['4K', '2160p']),
+                    ([132, 183, 143], ['bdrip']),
+                    ([142], ['bd25', 'bd50']),
+                    ([33, 34, 144], ['dvdrip', 'dvdr']),
                     ]
 
     def _searchOnTitle(self, title, movie, quality, results):  
@@ -110,12 +111,22 @@ class ManicomioShare(TorrentProvider, MovieProvider):
                         namedata = torrent.find('span')
                         torrentdata.torrentname = namedata.text.strip()
                         
-                        #movie year. we also do a comparation to see if the torrent we've found is really the one we want
-                        #we do that using the movie release year
+                        # movie year. we also do a comparation to see if the torrent we've found is really the one we want
+                        # we do that using the movie release year
                         movieYear = torrent.find('font', attrs={'color': 'green'}).text.strip()
+                        
                         if movieYear != (str(movie['info']['year'])):
-                            log.debug("Wrong movie date, found " + movieYear + " Expected: " + str(movie['info']['year']) )
-                            continue
+                            # #Maybe the year is different because the search show the release date in brazil and not the original date
+                            # We open the torrent details page to search for the imdb info in there to compare and replace it if necessary
+                            origiDte = BeautifulSoup(self.getHTMLData(torrentdata.permalink)).find('div', attrs={'id': 'infoimdb'}).findAll('p')[2].text
+                            origiDte = re.sub('Ano: ', '', origiDte)
+                            ##now we try to test again comparing the recovered lauch date with the imdb data
+                            if origiDte == (str(movie['info']['year'])):
+                                movieYear = origiDte
+                                log.debug("Found possible mismatch between brazillian relase date and international release date. Fixed")
+                            else:
+                                continue
+                            # log.debug(torrentdata.permalink)                            
                         
                         # FileSize
                         sizedata = torrent.find_all("span", {"class": "h3t"})
@@ -178,9 +189,9 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         }
 
     def loginSuccess(self, output):
-        #log.debug('Debug login: ' + output)    
-        #log.debug('Checking login success for Manicomio-share: %s' % ('True' if ('deslogar.php' in output.lower()
-                                                                                 #or '<title>:: Manicomio Share - A comunidade do Brasil ::</title>' in output.lower()) else 'False'))
+        # log.debug('Debug login: ' + output)    
+        # log.debug('Checking login success for Manicomio-share: %s' % ('True' if ('deslogar.php' in output.lower()
+                                                                                 # or '<title>:: Manicomio Share - A comunidade do Brasil ::</title>' in output.lower()) else 'False'))
         return '<title>MS-->Logue-se : :: Manicomio Share - A comunidade do Brasil ::</title>' in output
 
     loginCheckSuccess = loginSuccess
@@ -206,20 +217,20 @@ class ManicomioShare(TorrentProvider, MovieProvider):
 #             log.error('Failed to parse IMDB page: %s' % (traceback.format_exc()))
             
     def replaceTitleAndValidateTorrent(self, movie, torrentName):
-        #Removes [DualAudio *] tags and subtitle tags [-] or [+]
-        torrentNameCleared = re.sub('\[DualAudio.+?].+[-+]\]',"", torrentName)
+        # Removes [DualAudio *] tags and subtitle tags [-] or [+]
+        torrentNameCleared = re.sub('\[DualAudio.+?].+[-+]\]', "", torrentName)
         torrentNameCleared = re.sub('\[livre\]', "", torrentNameCleared)
         torrentNameCleared = re.sub('\[Repack\]', "", torrentNameCleared)
         torrentNameCleared = re.sub('Dublado', "", torrentNameCleared)
-        torrentNameCleared = re.sub(r"^(.*?)\s-\s(?!\d)","",torrentNameCleared)
-        #originalTitle = movie['title']
-        #originalTitle = originalTitle.replace(":","")
-        #originalTitle = originalTitle.replace("-","")
-        #torrentNameCleared = torrentNameCleared.replace(translatedName, movie['title'])
+        torrentNameCleared = re.sub(r"^(.*?)\s-\s(?!\d)", "", torrentNameCleared)
+        # originalTitle = movie['title']
+        # originalTitle = originalTitle.replace(":","")
+        # originalTitle = originalTitle.replace("-","")
+        # torrentNameCleared = torrentNameCleared.replace(translatedName, movie['title'])
             
-        #Couchpotato expects that the movie release year appears on the torrent name
+        # Couchpotato expects that the movie release year appears on the torrent name
         torrentNameCleared = torrentNameCleared.replace("[", "(" + str(movie['info']['year']) + ") [")
-        ##edge case: some torrent names don't have any brackets so we need to verify if we need to add the year if it's not already there
+        # #edge case: some torrent names don't have any brackets so we need to verify if we need to add the year if it's not already there
         hasDateAlready = re.search('\(\d\d\d\d\)', torrentNameCleared)
         if not hasDateAlready:
             torrentNameCleared = torrentNameCleared + " (" + str(movie['info']['year']) + ")"
@@ -242,12 +253,12 @@ class ManicomioShare(TorrentProvider, MovieProvider):
             return True
 
         try:
-            #Open the login page to load cloudflare cookies. 
+            # Open the login page to load cloudflare cookies. 
             output = self.urlopen(self.urls['login'])
-            #log.debug('Debug ------ 1: ' + output)    
-            #Now try to login with provided data
-            output = self.urlopen(self.urls['login'], data = self.getLoginParams())           
-            #log.debug('Debug login --------2: ' + output)    
+            # log.debug('Debug ------ 1: ' + output)    
+            # Now try to login with provided data
+            output = self.urlopen(self.urls['login'], data=self.getLoginParams())           
+            # log.debug('Debug login --------2: ' + output)    
 
             if self.loginSuccess(output):
                 self.last_login_check = now
