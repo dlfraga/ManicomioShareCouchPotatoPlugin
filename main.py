@@ -136,53 +136,10 @@ class ManicomioShare(TorrentProvider, MovieProvider):
                         torrentdata.torrentscore = torrscore
     
                         # datetorrentadded
-                        try:
+#                         try:
                             # we need to get another page that returns the torrent details
                             # http://www.manicomio-share.com/ajax/ajax2.php?torrent=ID 
-                            log.debug('Torrent found: ' + torrentdata.torrentname)                   
-                            data = self.getHTMLData(self.urls['torrentdetails'] % tryUrlencode(torrentdata.torrentid))   
-                            
-                            # Hack to avoid needing to load a specific locale on the system
-                            # this was done due to some python distributions that are used on NAS
-                            # systems that doesn't have all locales installed
-                            monthofyear = {
-                                'Janeiro': '1',
-                                'Fevereiro': '2',
-                                'Marco': '3',
-                                'Abril': '4',
-                                'Maio': '5',
-                                'Junho': '6',
-                                'Julho': '7',
-                                'Agosto': '8',
-                                'Setembro': '9',
-                                'Outubro': '10',
-                                'Novembro': '11',
-                                'Dezembro': '12'
-                            }                        
-                            soup = BeautifulSoup(data, "lxml")
-                            body = soup.find('body')
-                            datestr = body.text.split(",")[1]
-                            # example string:  06 de Outubro de 2015 \u00e0s 17:31"                        
-                            datestr = re.sub('\\\\u00e0s\ ', '', datestr)
-    #                         recom = re.compile(u'\u00e7\', re.UNICODE)                        
-                            datestr = re.sub('\\\\u00e7', 'c', datestr)
-                            datestr = re.sub('"', '', datestr)                        
-                            monthinportuguese = datestr.split(" ")[3]
-                            datechanged = re.sub(monthinportuguese, monthofyear[
-                                                 monthinportuguese], datestr)
-                            datechanged = datechanged.strip()
-                            # after 'conversion': 06 de 10 de 2015 17:31
-                            addeddatetuple = time.strptime(datechanged, '%d de %m de %Y %H:%M')
-                            torrentdata.datetorrentadded = int(time.mktime(addeddatetuple))
-                        except:
-                            log.error('Unable to convert datetime from %s: %s',
-                                      (self.getName(), traceback.format_exc()))
-                            torrentdata.datetorrentadded = 0
-    
-                        # ageindays
-                        torrentdata.ageindays = int(
-                            (time.time() - torrentdata.datetorrentadded) / 24 / 60 / 60)
-    
+                        log.debug('Torrent found: ' + torrentdata.torrentname)                   
                         # Test if the Freelech box has been checked
                         if (onlyfreeleech is False) or (onlyfreeleech is True and torrentdata.freeleech is True):
                             # Only Freelech is switched off OR only Freelech is ON and the torrent is a freeleech,
@@ -238,7 +195,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
 #                 return None
 #             else:
 #                 try:
-#                     akasoup = BeautifulSoup(result, 'lxml') 
+#                     akasoup = BeautifulSoup(result, ''html.parser') 
 #                     akatable = akasoup.find('table', attrs={'id': 'akas'})    
 #                     pattern = re.compile(r'^(Brazil)$')
 #                     return akatable.find('td', text=pattern).parent.find_all()[1].text
