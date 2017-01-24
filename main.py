@@ -16,7 +16,7 @@ from couchpotato.core.helpers.variable import getImdb
 import traceback
 import re
 import time
-from couchpotato.core.media.movie.providers.info.themoviedb import TheMovieDb
+
 log = CPLog(__name__)
 
 class TorrentDetails(object):
