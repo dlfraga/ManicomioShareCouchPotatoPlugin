@@ -12,7 +12,7 @@ from couchpotato.core.logger import CPLog
 from requests import HTTPError
 from couchpotato.core.media._base.providers.torrent.base import TorrentProvider
 from couchpotato.core.media.movie.providers.base import MovieProvider
-
+from couchpotato.core.helpers.variable import getImdb
 import traceback
 import re
 import time
@@ -115,18 +115,23 @@ class ManicomioShare(TorrentProvider, MovieProvider):
                         # we do that using the movie release year
                         movieYear = torrent.find('font', attrs={'color': 'green'}).text.strip()
                         
-                        if movieYear != (str(movie['info']['year'])):
+                        if movieYear != (str(movie['info']['year'])):                          
                             # #Maybe the year is different because the search show the release date in brazil and not the original date
                             # We open the torrent details page to search for the imdb info in there to compare and replace it if necessary
-                            origiDte = BeautifulSoup(self.getHTMLData(torrentdata.permalink)).find('div', attrs={'id': 'infoimdb'}).findAll('p')[2].text
-                            origiDte = re.sub('Ano: ', '', origiDte)
-                            ##now we try to test again comparing the recovered lauch date with the imdb data
-                            if origiDte == (str(movie['info']['year'])):
-                                movieYear = origiDte
-                                log.debug("Found possible mismatch between brazillian relase date and international release date. Fixed")
-                            else:
-                                continue
-                            # log.debug(torrentdata.permalink)                            
+                            imdbUrl = BeautifulSoup(self.getHTMLData(torrentdata.permalink)).find('div', attrs={'id': 'infoimdb'}).findAll('a')[1].text
+                            if imdbUrl:
+                                imdbId = getImdb(imdbUrl, False, False)
+                                log.debug(imdbId)
+                                # #now we test if the imdb on the torrent page and the one from couchpotato match.
+                                if imdbId == (str(movie['identifiers']['imdb'])):
+                                    # if it's true we simply fix the torrent date
+                                    movieYear = str(movie['info']['year'])
+                                    log.debug("Found possible mismatch between brazillian relase date and international release date. Fixed")
+                                else:
+                                    continue
+                            else :
+                                log.debug("Torrent doesn't have imdb info.")
+                                continue                            
                         
                         # FileSize
                         sizedata = torrent.find_all("span", {"class": "h3t"})
