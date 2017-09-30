@@ -49,7 +49,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
     http_time_between_calls = 5  # seconds
     
     cat_ids = [
-                    ([127], ['720p', '1080p', 'brrip']),
+                    ([127, 148, 132, 152], ['720p', '1080p', 'brrip']),
                     ([147, 141], ['3d']),
                     ([189], ['4K', '2160p']),
                     ([132, 183, 143], ['bdrip']),
