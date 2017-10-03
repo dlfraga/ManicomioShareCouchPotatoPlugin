@@ -40,7 +40,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         'baseurl': 'https://www.manicomio-share.com/',
         'login': 'https://www.manicomio-share.com/',
         'login_check': 'https://www.manicomio-share.com/deslogar.php',
-        'search': 'https://www.manicomio-share.com/pesquisa.php?busca=%s&cat=%s&opt2=0&vnc=0&ano=0&opt=0',
+        'search': 'https://www.manicomio-share.com/pesquisa.php?busca=%s&cat=%s&opt2=0&vnc=0&ano=%s&opt=%s',
         'torrentdetails': 'https://www.manicomio-share.com/ajax/ajax2.php?torrent=%s',
         'imdbreleaseinfo': 'http://www.imdb.com/title/%s/releaseinfo'
     }
@@ -49,7 +49,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
     http_time_between_calls = 5  # seconds
     
     cat_ids = [
-                    ([127], ['720p', '1080p', 'brrip']),
+                    ([127, 148, 132, 152], ['720p', '1080p', 'brrip']),
                     ([147, 141], ['3d']),
                     ([189], ['4K', '2160p']),
                     ([132, 183, 143], ['bdrip']),
@@ -58,27 +58,71 @@ class ManicomioShare(TorrentProvider, MovieProvider):
                     ]
 
     def _searchOnTitle(self, title, movie, quality, results):  
-        if self.conf('only_freeleech'):
-                onlyfreeleech = True
-        else:
-                onlyfreeleech = False        
-            
+
         if not '/deslogar.php' in self.urlopen(self.urls['login'], data=self.getLoginParams()).lower():
             log.info('problems logging into manicomio-share.com')
             return []                        
-        torrentlist = []            
-        log.info('Looking on manicomio-share for movie named %s, with quality %s and category code %s' % (title, str(quality['custom']['quality']), self.getCatId(quality)))
+
+        log.info('NEW SEARCH: Looking on manicomio-share for movie %s (%s), with quality %s and category code %s' % (title, movie['info']['year'], str(quality['custom']['quality']), self.getCatId(quality)))
+        
+        torrentlist = []    
+        movieYear = int(movie['info']['year'])
+
+        log.info('Searching movie %s for year %s' % (title, str(movieYear)) )
+        self.searchMovie(title, movie, quality, results, torrentlist, movieYear)
+
+        log.info('Searching movie %s for year %s' % (title, str(movieYear+1)) )
+        self.searchMovie(title, movie, quality, results, torrentlist, movieYear + 1)
+
+        log.info('Number of torrents found from manicomio-share = ' + str(len(torrentlist)))
+    
+        for torrentfind in torrentlist:                    
+            log.info('manicomio-share found ' + torrentfind.torrentname)    
+            
+            log.debug('Detalhes: leechers: ' + str(torrentfind.leechers)
+                + ' seeders: ' + str(torrentfind.seeders)
+                + ' name: ' + self.replaceTitleAndValidateTorrent(movie, torrentfind.torrentname)
+                + ' id: ' + str(torrentfind.torrentid)
+                + ' size: ' + str(self.parseSize(torrentfind.filesize))
+                + ' score: ' + str(torrentfind.torrentscore)
+                + ' date: ' + str(torrentfind.datetorrentadded)
+                + ' age: ' + str(torrentfind.ageindays)
+#               + ' url: ' + str(torrentfind.downlink)
+#               + ' detail_url: ' + str(torrentfind.permalink)
+                )
+
+            results.append({
+                'leechers': torrentfind.leechers,
+                'seeders': torrentfind.seeders,
+                'name': self.replaceTitleAndValidateTorrent(movie, torrentfind.torrentname),
+                'url': torrentfind.downlink,
+                'detail_url': torrentfind.permalink,
+                'id': torrentfind.torrentid,
+                'size': self.parseSize(torrentfind.filesize),
+                'score': torrentfind.torrentscore,
+                'date': torrentfind.datetorrentadded,
+                'age': torrentfind.ageindays
+            })
+        
+
+
+    def searchMovie(self, title, movie, quality, results, torrentlist, movieYear):
+        
+        if self.conf('only_freeleech'):
+            onlyfreeleech = 1
+        else:
+            onlyfreeleech = 0
         
         for categoryCode in self.getCatId(quality):
-            data = self.getHTMLData(self.urls['search'] % (tryUrlencode(title) , categoryCode))                                    
+            data = self.getHTMLData(self.urls['search'] % (tryUrlencode(title), categoryCode, movieYear, onlyfreeleech))
             if data:
                 try:
                     resultstable = BeautifulSoup(data).find('table', attrs={'id': 'tbltorrent'})
                     if resultstable is None:
-                        log.info('movie not found on Manicomio-share. Maybe try an alternative name?')
-                        return []
+                        log.info('Movie not found on Manicomio-share. Maybe try an alternative name?')
+                        return 
     
-                    htmltorrentlist = resultstable.find_all('tr', attrs={'id': 'closest'})                
+                    htmltorrentlist = resultstable.find_all('tr', attrs={'id': 'closest'})
                     for torrent in htmltorrentlist:
                         torrentdata = TorrentDetails(0, 0, '', '', 0, '', '', False, 0, 0, 0)
     
@@ -110,29 +154,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
                         # torrentname
                         namedata = torrent.find('span')
                         torrentdata.torrentname = namedata.text.strip()
-                        
-                        # movie year. we also do a comparation to see if the torrent we've found is really the one we want
-                        # we do that using the movie release year
-                        movieYear = torrent.find('font', attrs={'color': 'green'}).text.strip()
-                        
-                        if movieYear != (str(movie['info']['year'])):                          
-                            # #Maybe the year is different because the search show the release date in brazil and not the original date
-                            # We open the torrent details page to search for the imdb info in there to compare and replace it if necessary
-                            imdbUrl = BeautifulSoup(self.getHTMLData(torrentdata.permalink)).find('div', attrs={'id': 'infoimdb'}).findAll('a')[1].text
-                            if imdbUrl:
-                                imdbId = getImdb(imdbUrl, False, False)
-                                log.debug(imdbId)
-                                # #now we test if the imdb on the torrent page and the one from couchpotato match.
-                                if imdbId == (str(movie['identifiers']['imdb'])):
-                                    # if it's true we simply fix the torrent date
-                                    movieYear = str(movie['info']['year'])
-                                    log.debug("Found possible mismatch between brazillian relase date and international release date. Fixed")
-                                else:
-                                    continue
-                            else :
-                                log.debug("Torrent doesn't have imdb info.")
-                                continue                            
-                        
+                                                
                         # FileSize
                         sizedata = torrent.find_all("span", {"class": "h3t"})
                         sizefile = (sizedata[1].text).replace("(", "").replace(")", "").strip()
@@ -150,41 +172,17 @@ class ManicomioShare(TorrentProvider, MovieProvider):
                         if torrentdata.freeleech is False:                        
                             torrscore += tryInt(self.conf('extrascore_freelech'))                        
                         torrentdata.torrentscore = torrscore
-    
-                        # datetorrentadded
-#                         try:
-                            # we need to get another page that returns the torrent details
-                            # http://www.manicomio-share.com/ajax/ajax2.php?torrent=ID 
+                        
                         log.debug('Torrent found: ' + torrentdata.torrentname)                   
-                        # Test if the Freelech box has been checked
-                        if (onlyfreeleech is False) or (onlyfreeleech is True and torrentdata.freeleech is True):
-                            # Only Freelech is switched off OR only Freelech is ON and the torrent is a freeleech,
-                            # so safe to add to results
-                                  
-                            torrentlist.append(torrentdata)
-    
-                    log.info('Number of torrents found from manicomio-share = ' + str(len(torrentlist)))
-    
-                    for torrentfind in torrentlist:                    
-                        log.info('manicomio-share found ' + torrentfind.torrentname)    
-#                        log.debug(self.replaceTitleAndValidateTorrent(movie, title, torrentfind.torrentname))                              
-                        results.append({
-                            'leechers': torrentfind.leechers,
-                            'seeders': torrentfind.seeders,
-                            'name': self.replaceTitleAndValidateTorrent(movie, torrentfind.torrentname),
-                            'url': torrentfind.downlink,
-                            'detail_url': torrentfind.permalink,
-                            'id': torrentfind.torrentid,
-                            'size': self.parseSize(torrentfind.filesize),
-                            'score': torrentfind.torrentscore,
-                            'date': torrentfind.datetorrentadded,
-                            'age': torrentfind.ageindays
-                        })
+                        
+                        torrentlist.append(torrentdata)
     
                 except:
                     log.error('Failed getting results from %s: %s',
                               (self.getName(), traceback.format_exc()))
-                    
+                
+                return 
+
     def getLoginParams(self):        
         log.debug('Getting login params for Manicomio-share ')            
         return {
@@ -227,6 +225,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         torrentNameCleared = re.sub('\[livre\]', "", torrentNameCleared)
         torrentNameCleared = re.sub('\[Repack\]', "", torrentNameCleared)
         torrentNameCleared = re.sub('Dublado', "", torrentNameCleared)
+        torrentNameCleared = re.sub('\[.[^[]*\]', "", torrentName) #remove anything between []
         torrentNameCleared = re.sub(r"^(.*?)\s-\s(?!\d)", "", torrentNameCleared)
         # originalTitle = movie['title']
         # originalTitle = originalTitle.replace(":","")
