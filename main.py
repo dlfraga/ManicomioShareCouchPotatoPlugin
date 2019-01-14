@@ -1,4 +1,4 @@
-# coding: utf8
+# coding: utf-8
 # This code is not endorsed nor approved by the site maintainers or any representatives.
 # Use at your own risk.
 # The plugin was based on the work of https://github.com/flightlevel/TehConnectionCouchPotatoPlugin/ and
@@ -18,10 +18,12 @@ import re
 import time
 
 log = CPLog(__name__)
+torrentlist = []
+
 
 class TorrentDetails(object):
     def __init__(self, seeders, leechers, permalink, downlink, torrentid, torrentname, filesize, freeleech,
-                  torrentscore, datetorrentadded, ageindays):
+                 torrentscore, datetorrentadded, ageindays):
         self.seeders = seeders
         self.leechers = leechers
         self.permalink = permalink
@@ -32,7 +34,8 @@ class TorrentDetails(object):
         self.freeleech = freeleech
         self.torrentscore = torrentscore
         self.datetorrentadded = datetorrentadded
-        self.ageindays = ageindays        
+        self.ageindays = ageindays
+
 
 class ManicomioShare(TorrentProvider, MovieProvider):
     # 'search': 'http://www.manicomio-share.com/busca-filmes.php?vince=0&onde=1&search=%s&parent_categ=0&qualite=&cor=&codecvideo=&extensao=&tipoaudio=&lang=0&paisorigem=&direc=',
@@ -44,52 +47,50 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         'torrentdetails': 'https://www.manicomio-share.com/ajax/ajax2.php?torrent=%s',
         'imdbreleaseinfo': 'http://www.imdb.com/title/%s/releaseinfo'
     }
-        
 
     http_time_between_calls = 5  # seconds
-    
+
     cat_ids = [
-                    ([127, 148, 132, 152], ['720p', '1080p', 'brrip']),
-                    ([147, 141], ['3d']),
-                    ([189], ['4K', '2160p']),
-                    ([132, 183, 143], ['bdrip']),
-                    ([142], ['bd25', 'bd50']),
-                    ([33, 34, 144], ['dvdrip', 'dvdr']),
-                    ]
+        ([127, 148], ['720p', '1080p', 'brrip']),
+        ([147, 183], ['3d']),
+        ([189, 193], ['4K', '2160p']),
+        ([132, 143, 152], ['bdrip']),
+        ([142], ['bd25', 'bd50']),
+        ([34, 144], ['dvdrip', 'dvdr', 'dvd-rip']),
+    ]
 
-    def _searchOnTitle(self, title, movie, quality, results):  
-
-        if not '/deslogar.php' in self.urlopen(self.urls['login'], data=self.getLoginParams()).lower():
-            log.info('problems logging into manicomio-share.com')
-            return []                        
-
-        log.info('NEW SEARCH: Looking on manicomio-share for movie %s (%s), with quality %s and category code %s' % (title, movie['info']['year'], str(quality['custom']['quality']), self.getCatId(quality)))
-        
-        torrentlist = []    
+    def _searchOnTitle(self, title, movie, quality, results):
+        log.info('SEARCH: Looking on manicomio-share for movie %s (%s), with quality %s' %
+                 (title, movie['info']['year'], str(quality['custom']['quality'])))
         movieYear = int(movie['info']['year'])
+        self.searchMovie(title, movie, quality, results,
+                         torrentlist, movieYear)
 
-        log.info('Searching movie %s for year %s' % (title, str(movieYear)) )
-        self.searchMovie(title, movie, quality, results, torrentlist, movieYear)
+        if torrentlist is None:
+            # Hack to account for the braziilian launch dates that sometimes are a year delayed. Only used when
+            # normal searching yields no results.
+            log.info('Searching movie %s for year %s' %
+                     (title, str(movieYear+1)))
+            self.searchMovie(title, movie, quality, results,
+                             torrentlist, movieYear + 1)
 
-        log.info('Searching movie %s for year %s' % (title, str(movieYear+1)) )
-        self.searchMovie(title, movie, quality, results, torrentlist, movieYear + 1)
+        log.info('Number of torrents found from manicomio-share = ' +
+                 str(len(torrentlist)))
 
-        log.info('Number of torrents found from manicomio-share = ' + str(len(torrentlist)))
-    
-        for torrentfind in torrentlist:                    
-            log.info('manicomio-share found ' + torrentfind.torrentname)    
-            
+        for torrentfind in torrentlist:
             log.debug('Detalhes: leechers: ' + str(torrentfind.leechers)
-                + ' seeders: ' + str(torrentfind.seeders)
-                + ' name: ' + self.replaceTitleAndValidateTorrent(movie, torrentfind.torrentname)
-                + ' id: ' + str(torrentfind.torrentid)
-                + ' size: ' + str(self.parseSize(torrentfind.filesize))
-                + ' score: ' + str(torrentfind.torrentscore)
-                + ' date: ' + str(torrentfind.datetorrentadded)
-                + ' age: ' + str(torrentfind.ageindays)
-#               + ' url: ' + str(torrentfind.downlink)
-#               + ' detail_url: ' + str(torrentfind.permalink)
-                )
+                      + ' seeders: ' + str(torrentfind.seeders)
+                      + ' name: ' +
+                      self.replaceTitleAndValidateTorrent(
+                          movie, torrentfind.torrentname)
+                      + ' id: ' + str(torrentfind.torrentid)
+                      + ' size: ' + str(self.parseSize(torrentfind.filesize))
+                      + ' score: ' + str(torrentfind.torrentscore)
+                      + ' date: ' + str(torrentfind.datetorrentadded)
+                      + ' age: ' + str(torrentfind.ageindays)
+                      #               + ' url: ' + str(torrentfind.downlink)
+                      #               + ' detail_url: ' + str(torrentfind.permalink)
+                      )
 
             results.append({
                 'leechers': torrentfind.leechers,
@@ -103,88 +104,116 @@ class ManicomioShare(TorrentProvider, MovieProvider):
                 'date': torrentfind.datetorrentadded,
                 'age': torrentfind.ageindays
             })
-        
-
 
     def searchMovie(self, title, movie, quality, results, torrentlist, movieYear):
-        
+        # We remove any : simbols from the movie title to make our search more inclusive
+        movieTitleWithoutColons = re.sub(':', "", title)
         if self.conf('only_freeleech'):
             onlyfreeleech = 1
         else:
             onlyfreeleech = 0
-        
+
         for categoryCode in self.getCatId(quality):
-            data = self.getHTMLData(self.urls['search'] % (tryUrlencode(title), categoryCode, movieYear, onlyfreeleech))
+            data = self.getHTMLData(self.urls['search'] % (
+                tryUrlencode(movieTitleWithoutColons), categoryCode, movieYear, onlyfreeleech))
+
             if data:
                 try:
-                    resultstable = BeautifulSoup(data).find('table', attrs={'id': 'tbltorrent'})
-                    if resultstable is None:
-                        log.info('Movie not found on Manicomio-share. Maybe try an alternative name?')
-                        return 
-    
-                    htmltorrentlist = resultstable.find_all('tr', attrs={'id': 'closest'})
+                    resultsTable = BeautifulSoup(data).find(
+                        'table', attrs={'id': 'tbltorrent'})
+                    if resultsTable is None:
+                        log.info(
+                            'Movie not found on Manicomio-share. Maybe try an alternative name?')
+                        continue
+
+                    htmltorrentlist = resultsTable.find_all(
+                        'tr', attrs={'id': 'closest'})
+                    if htmltorrentlist is None:
+                        log.debug('Could not get torrents list')
                     for torrent in htmltorrentlist:
-                        torrentdata = TorrentDetails(0, 0, '', '', 0, '', '', False, 0, 0, 0)
-    
-                        # seeeders. we get the first span tag that holds both seeds and leech numbers
-    #                     log.debug(torrent)
-                        seedleech = torrent.find_all("span", attrs={'class': 'h3o'})
-                        seedata = seedleech[0].find("font", attrs={'color': 'green'})
+                        torrentdata = TorrentDetails(
+                            0, 0, '', '', 0, '', '', False, 0, 0, 0)
+                        # seeeders. we get the TD that holds both seeds and leech numbers
+                        seedleech = torrent.find_all(
+                            "td", attrs={'align': 'center'})
+                        if seedleech is None:
+                            log.debug('Error getting seed/leech data')
+
+                        seedata = seedleech[2].find(
+                            "span", attrs={'class': 'badge badge-success'})
+                        if seedata is None:
+                            log.debug('Error getting quantity of seeds')
                         torrentdata.seeders = (seedata.text.strip())
-    
+
                         # leechers. We get the color marked in red, the leechers count
-                        leechdata = seedleech[1].find("font", attrs={'color': 'red'})
+                        leechdata = seedleech[2].find(
+                            "span", attrs={'class': 'badge badge-danger'})
+                        if leechdata is None:
+                            log.debug('Error getting leeches data')
                         torrentdata.leechers = (leechdata.text.strip())
-    
+
                         # torrent html page link. Gets the second link on the torrent tr and its address
                         link = torrent.find_all('a')[1]['href']
+                        if link is None:
+                            log.debug("Error getting the torrent permalink")
                         torrentdata.permalink = link
-    
+
                         # .torrent download link
-                        downlink = torrent.find('a', attrs={'class': 'btn btn-default btn-xs'})['href']
+                        downlink = torrent.find(
+                            'a', attrs={'class': 'btn btn-default btn-xs'})['href']
+                        if downlink is None:
+                            log.debug("Error getting torrent download link")
                         torrentdata.downlink = downlink
-    
+
                         # Torrent ID . Gets the number on the URL address that is
                         # used to download the torrent file.
                         regx = '.*?\\d+.*?(\\d+)'
                         rg = re.compile(regx, re.IGNORECASE | re.DOTALL)
                         m = rg.search(link)
-                        torrentdata.torrentid = (int(m.group(1)) if m else None)
-    
+                        torrentdata.torrentid = (
+                            int(m.group(1)) if m else None)
+
                         # torrentname
                         namedata = torrent.find('span')
                         torrentdata.torrentname = namedata.text.strip()
-                                                
+                        if namedata is None:
+                            log.debug('Error getting torrent name')
                         # FileSize
-                        sizedata = torrent.find_all("span", {"class": "h3t"})
-                        sizefile = (sizedata[1].text).replace("(", "").replace(")", "").strip()
+                        sizedata = torrent.find_all("td", {"align": "center"})
+                        sizefile = (sizedata[1].text).replace(
+                            "(", "").replace(")", "").strip()
+                        if sizedata is None:
+                            log.debug('Error getting torrent size')
                         torrentdata.filesize = sizefile
-                        
+
                         # FreeLeech. They are marked as "Livre" on the torrent name
                         freeleechdata = torrent.find("font", {"color": "blue"})
                         if freeleechdata is None:
                             torrentdata.freeleech = False
                         else:
                             torrentdata.freeleech = True
-    
+
                         # TorrentScore
                         torrscore = 0
-                        if torrentdata.freeleech is False:                        
-                            torrscore += tryInt(self.conf('extrascore_freelech'))                        
+                        if torrentdata.freeleech is False:
+                            torrscore += tryInt(self.conf('extrascore_freelech'))
                         torrentdata.torrentscore = torrscore
-                        
-                        log.debug('Torrent found: ' + torrentdata.torrentname)                   
-                        
-                        torrentlist.append(torrentdata)
-    
+
+                        # Checks for duplicate torrents found in search and ignores them
+                        if torrentlist is not None:
+                            torrentAlreadyAdded = False
+                            for torrentItem in torrentlist:
+                                if torrentItem.torrentid == torrentdata.torrentid:
+                                    torrentAlreadyAdded = True
+                            if torrentAlreadyAdded is not True:
+                                torrentlist.append(torrentdata)
                 except:
                     log.error('Failed getting results from %s: %s',
                               (self.getName(), traceback.format_exc()))
-                
-                return 
 
-    def getLoginParams(self):        
-        log.debug('Getting login params for Manicomio-share ')            
+            continue
+
+    def getLoginParams(self):
         return {
             'password': str(self.conf('password')),
             'username': str(self.conf('username')),
@@ -192,56 +221,36 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         }
 
     def loginSuccess(self, output):
-        # log.debug('Debug login: ' + output)    
-        # log.debug('Checking login success for Manicomio-share: %s' % ('True' if ('deslogar.php' in output.lower()
-                                                                                 # or '<title>:: Manicomio Share - A comunidade do Brasil ::</title>' in output.lower()) else 'False'))
-        return '<title>MS-->Logue-se : :: Manicomio Share - A comunidade do Brasil ::</title>' in output
+        # log.debug('Debug login: ' + output)
+        return log.debug('Checking login success for Manicomio-share: %s' % ('True' if ('deslogar.php' in output.lower()
+                                                                                        or '<title>:: Manicomio Share - A comunidade do Brasil ::</title>' in output.lower()) else 'False'))
 
-    loginCheckSuccess = loginSuccess
-#     
-#     def getBrazillianTitle(self, title, movie):        
-#         # This function scrapes the imdb page associated with the movie's release info
-#         log.debug('Looking on IMDB for Brazillian title of: ' + title)
-#         try:            
-#             result = self.getHTMLData(self.urls['imdbreleaseinfo'] % tryUrlencode(movie['identifiers']['imdb']))         
-#             if result is None: 
-#                 log.debug('IMDB could not find a movie corresponding to : ' + title)
-#                 return None
-#             else:
-#                 try:
-#                     akasoup = BeautifulSoup(result, ''html.parser') 
-#                     akatable = akasoup.find('table', attrs={'id': 'akas'})    
-#                     pattern = re.compile(r'^(Brazil)$')
-#                     return akatable.find('td', text=pattern).parent.find_all()[1].text
-#                 except Exception:
-#                     log.debug("Movie doesn't have a translated name or is in native language")
-#                     return title
-#         except:
-#             log.error('Failed to parse IMDB page: %s' % (traceback.format_exc()))
-            
     def replaceTitleAndValidateTorrent(self, movie, torrentName):
         # Removes [DualAudio *] tags and subtitle tags [-] or [+]
         torrentNameCleared = re.sub('\[DualAudio.+?].+[-+]\]', "", torrentName)
         torrentNameCleared = re.sub('\[livre\]', "", torrentNameCleared)
         torrentNameCleared = re.sub('\[Repack\]', "", torrentNameCleared)
         torrentNameCleared = re.sub('Dublado', "", torrentNameCleared)
-        torrentNameCleared = re.sub('\[.[^[]*\]', "", torrentName) #remove anything between []
-        torrentNameCleared = re.sub(r"^(.*?)\s-\s(?!\d)", "", torrentNameCleared)
-        # originalTitle = movie['title']
-        # originalTitle = originalTitle.replace(":","")
-        # originalTitle = originalTitle.replace("-","")
-        # torrentNameCleared = torrentNameCleared.replace(translatedName, movie['title'])
-            
+        # Removes double spacing
+        torrentNameCleared = re.sub('  ', "", torrentNameCleared)
+        # remove anything between []
+        torrentNameCleared = re.sub('\[.[^[]*\]', "", torrentNameCleared)
+        torrentNameCleared = re.sub(
+            r"^(.*?)\s-\s(?!\d)", "", torrentNameCleared)
+
         # Couchpotato expects that the movie release year appears on the torrent name
-        torrentNameCleared = torrentNameCleared.replace("[", "(" + str(movie['info']['year']) + ") [")
+        torrentNameCleared = torrentNameCleared.replace(
+            "[", "(" + str(movie['info']['year']) + ") [")
         # #edge case: some torrent names don't have any brackets so we need to verify if we need to add the year if it's not already there
         hasDateAlready = re.search('\(\d\d\d\d\)', torrentNameCleared)
         if not hasDateAlready:
-            torrentNameCleared = torrentNameCleared + " (" + str(movie['info']['year']) + ")"
-                        
+            torrentNameCleared = torrentNameCleared + \
+                " (" + str(movie['info']['year']) + ")"
+
         return torrentNameCleared
-    
+
     def login(self):
+        output = ""
         # Check if we are still logged in every hour
         now = time.time()
         if self.last_login_check and self.last_login_check < (now - 3600):
@@ -250,26 +259,26 @@ class ManicomioShare(TorrentProvider, MovieProvider):
                 if self.loginCheckSuccess(output):
                     self.last_login_check = now
                     return True
-            except: pass
+            except:
+                pass
             self.last_login_check = None
 
         if self.last_login_check:
             return True
 
         try:
-            # Open the login page to load cloudflare cookies. 
+            # Open the login page to load cloudflare cookies.
             output = self.urlopen(self.urls['login'])
-            # log.debug('Debug ------ 1: ' + output)    
             # Now try to login with provided data
-            output = self.urlopen(self.urls['login'], data=self.getLoginParams())           
-            # log.debug('Debug login --------2: ' + output)    
-
-            if self.loginSuccess(output):
+            output = self.urlopen(
+                self.urls['login'], data=self.getLoginParams())
+            # Try to reload the page to see if we have been redirected
+            output = self.urlopen(self.urls['login'])
+            if self.loginCheckSuccess(output):
                 self.last_login_check = now
                 self.login_failures = 0
                 return True
-
-            error = 'unknown'
+            error = 'Failed to login'
         except Exception as e:
             if isinstance(e, HTTPError):
                 if e.response.status_code >= 400 and e.response.status_code < 500:
