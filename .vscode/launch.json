@@ -8,7 +8,7 @@
             "name": "Python: Couchpotato.py",
             "type": "python",
             "request": "launch",
-            "program": "C:/Users/Daniel/Desktop/CouchPotatoServer/Couchpotato.py",
+            "program": "C:/CouchPotatoServer/Couchpotato.py",
             "args" : []
         },
         {
