@@ -66,7 +66,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         self.searchMovie(title, movie, quality, results,
                          torrentlist, movieYear)
 
-        if torrentlist is None:
+        if len(torrentlist) is 0:
             # Hack to account for the braziilian launch dates that sometimes are a year delayed. Only used when
             # normal searching yields no results.
             log.info('Searching movie %s for year %s' %
@@ -108,28 +108,31 @@ class ManicomioShare(TorrentProvider, MovieProvider):
     def searchMovie(self, title, movie, quality, results, torrentlist, movieYear):
         # We remove any : simbols from the movie title to make our search more inclusive
         movieTitleWithoutColons = re.sub(':', "", title)
+        
         if self.conf('only_freeleech'):
             onlyfreeleech = 1
         else:
             onlyfreeleech = 0
-
+        #Search the site for every category code in cat_ids sequentially
         for categoryCode in self.getCatId(quality):
             data = self.getHTMLData(self.urls['search'] % (
                 tryUrlencode(movieTitleWithoutColons), categoryCode, movieYear, onlyfreeleech))
-
+        #Process the data returned by the search. It should be a html page with the various torrents
             if data:
                 try:
+                    #Try to get the main html table where the torrent list is located
                     resultsTable = BeautifulSoup(data).find(
                         'table', attrs={'id': 'tbltorrent'})
                     if resultsTable is None:
                         log.info(
                             'Movie not found on Manicomio-share. Maybe try an alternative name?')
                         continue
-
+                    #Get the multiple torrent links in an array
                     htmltorrentlist = resultsTable.find_all(
                         'tr', attrs={'id': 'closest'})
                     if htmltorrentlist is None:
                         log.debug('Could not get torrents list')
+                    #Process each individual torrent returned 
                     for torrent in htmltorrentlist:
                         torrentdata = TorrentDetails(
                             0, 0, '', '', 0, '', '', False, 0, 0, 0)
@@ -178,6 +181,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
                         torrentdata.torrentname = namedata.text.strip()
                         if namedata is None:
                             log.debug('Error getting torrent name')
+
                         # FileSize
                         sizedata = torrent.find_all("td", {"align": "center"})
                         sizefile = (sizedata[1].text).replace(
@@ -193,7 +197,8 @@ class ManicomioShare(TorrentProvider, MovieProvider):
                         else:
                             torrentdata.freeleech = True
 
-                        # TorrentScore
+                        # TorrentScore is used by couchpotato to decide which file to download
+                        # The lines below forces the system to favor the freelech torrents
                         torrscore = 0
                         if torrentdata.freeleech is False:
                             torrscore += tryInt(self.conf('extrascore_freelech'))
@@ -221,12 +226,12 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         }
 
     def loginSuccess(self, output):
-        # log.debug('Debug login: ' + output)
+        #Checks if we have loggen in successfully
         return log.debug('Checking login success for Manicomio-share: %s' % ('True' if ('deslogar.php' in output.lower()
                                                                                         or '<title>:: Manicomio Share - A comunidade do Brasil ::</title>' in output.lower()) else 'False'))
 
     def replaceTitleAndValidateTorrent(self, movie, torrentName):
-        # Removes [DualAudio *] tags and subtitle tags [-] or [+]
+        # Removes Various tags from the torrent name
         torrentNameCleared = re.sub('\[DualAudio.+?].+[-+]\]', "", torrentName)
         torrentNameCleared = re.sub('\[livre\]', "", torrentNameCleared)
         torrentNameCleared = re.sub('\[Repack\]', "", torrentNameCleared)
@@ -238,7 +243,7 @@ class ManicomioShare(TorrentProvider, MovieProvider):
         torrentNameCleared = re.sub(
             r"^(.*?)\s-\s(?!\d)", "", torrentNameCleared)
 
-        # Couchpotato expects that the movie release year appears on the torrent name
+        # Couchpotato expects that the movie release year appears next to the torrent name
         torrentNameCleared = torrentNameCleared.replace(
             "[", "(" + str(movie['info']['year']) + ") [")
         # #edge case: some torrent names don't have any brackets so we need to verify if we need to add the year if it's not already there
